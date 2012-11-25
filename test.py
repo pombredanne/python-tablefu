@@ -14,7 +14,8 @@ class TableTest(unittest.TestCase):
             ['Samuel Beckett', 'Malone Muert', '120', 'Modernism'],
             ['James Joyce', 'Ulysses', '644', 'Modernism'],
             ['Nicholson Baker', 'Mezannine', '150', 'Minimalism'],
-            ['Vladimir Sorokin', 'The Queue', '263', 'Satire']]
+            ['Vladimir Sorokin', 'The Queue', '263', 'Satire'],
+            ['Ayn Rand', 'Atlas Shrugged', '1088', 'Science fiction']]
 
     def tearDown(self):
         self.csv_file.close()
@@ -54,7 +55,15 @@ class ColumnTest(TableTest):
         columns = ['Style', 'Author']
         t.columns = columns
         self.assertEqual(t.columns, columns)
-        
+
+
+class HeaderTest(TableTest):
+    
+    def test_get_headers(self):
+        "Get the table's headers"
+        t = TableFu(self.csv_file)
+        self.assertEqual(t.headers, self.table[0])
+
 
 class RowTest(TableTest):
     
@@ -272,14 +281,23 @@ class FilterTest(TableTest):
         f = t.filter(State='ALABAMA', County='COLBERT')
         self.assertEqual(f.count(), 5)
 
+
 class OptionsTest(TableTest):
     
-    def test_sort_option(self):
-        "Pass in options as keyword arguments"
+    def test_sort_option_str(self):
+        "Sort the table by a string field, Author"
         t = TableFu(self.csv_file, sorted_by={"Author": {'reverse': True}})
         self.table.pop(0)
         self.table.sort(key=lambda row: row[0], reverse=True)
         self.assertEqual(t[0].cells, self.table[0])
+    
+    def test_sort_option_int(self):
+        "Sorting the table by an int field, Number of Pages"
+        t = TableFu(self.csv_file)
+        pages = t.values('Number of Pages')
+        pages = sorted(pages, reverse=True)
+        t.sort('Number of Pages', reverse=True)
+        self.assertEqual(t.values('Number of Pages'), pages)
 
 
 class DatumFormatTest(TableTest):
@@ -309,7 +327,7 @@ class HTMLTest(TableTest):
         beckett = t[0]['Author']
         self.assertEqual(
             beckett.as_td(),
-            '<td class="datum">Samuel Beckett</td>'
+            '<td style="" class="datum">Samuel Beckett</td>'
         )
     
     def test_row_tr(self):
@@ -318,8 +336,43 @@ class HTMLTest(TableTest):
         row = t[0]
         self.assertEqual(
             row.as_tr(),
-            '<tr id="row0" class="row even"><td class="datum">Samuel Beckett</td><td class="datum">Malone Muert</td><td class="datum">120</td><td class="datum">Modernism</td></tr>'
+            '<tr id="row0" class="row even"><td style="" class="datum">Samuel Beckett</td><td style="" class="datum">Malone Muert</td><td style="" class="datum">120</td><td style="" class="datum">Modernism</td></tr>'
         )
+    
+    def test_header_th(self):
+        t = TableFu(self.csv_file)
+        hed = t.headers[0]
+        self.assertEqual(hed.as_th(), '<th style="" class="header">Author</th>')
+
+
+class StyleTest(TableTest):
+    
+    def test_datum_style(self):
+        t = TableFu(self.csv_file, style={'Author': 'text-align:left;'})
+        beckett = t[0]['Author']
+        self.assertEqual(beckett.style, 'text-align:left;')
+    
+    def test_datum_td_style(self):
+        t = TableFu(self.csv_file, style={'Author': 'text-align:left;'})
+        beckett = t[0]['Author']
+        self.assertEqual(
+            beckett.as_td(),
+            '<td style="text-align:left;" class="datum">Samuel Beckett</td>'
+        )
+    
+    def test_header_style(self):
+        t = TableFu(self.csv_file, style={'Author': 'text-align:left;'})
+        hed = t.headers[0]
+        self.assertEqual(hed.style, 'text-align:left;')
+    
+    def test_header_th_style(self):
+        t = TableFu(self.csv_file, style={'Author': 'text-align:left;'})
+        hed = t.headers[0]
+        self.assertEqual(
+            hed.as_th(),
+            '<th style="text-align:left;" class="header">Author</th>'
+        )
+
 
 class OutputTest(TableTest):
     
@@ -356,16 +409,17 @@ class OutputTest(TableTest):
         reader = csv.DictReader(self.csv_file)
         jsoned = [row for row in reader]
         self.assertEqual(list(t.dict()), jsoned)
-        
+
+
 class ManipulationTest(TableTest):
     
     def test_transpose(self):
         t = TableFu(self.table)
         result = [
-            ['Author', 'Samuel Beckett', 'James Joyce', 'Nicholson Baker', 'Vladimir Sorokin'],
-            ['Best Book', 'Malone Muert', 'Ulysses', 'Mezannine', 'The Queue'],
-            ['Number of Pages', '120', '644', '150', '263'],
-            ['Style', 'Modernism', 'Modernism', 'Minimalism', 'Satire']
+            ['Author', 'Samuel Beckett', 'James Joyce', 'Nicholson Baker', 'Vladimir Sorokin', 'Ayn Rand'],
+            ['Best Book', 'Malone Muert', 'Ulysses', 'Mezannine', 'The Queue', 'Atlas Shrugged'],
+            ['Number of Pages', '120', '644', '150', '263', '1088'],
+            ['Style', 'Modernism', 'Modernism', 'Minimalism', 'Satire', 'Science fiction']
         ]
         
         transposed = t.transpose()
@@ -375,7 +429,8 @@ class ManipulationTest(TableTest):
             'Samuel Beckett',
             'James Joyce',
             'Nicholson Baker',
-            'Vladimir Sorokin'
+            'Vladimir Sorokin',
+            'Ayn Rand',
         ])
     
     def test_row_map(self):
@@ -404,7 +459,8 @@ class ManipulationTest(TableTest):
             for value in ['Best Book', 'Style']
         ]
         self.assertEqual(result, t.map(str.lower, 'Best Book', 'Style'))
-        
+
+
 class FormatTest(unittest.TestCase):
 
     def setUp(self):
@@ -420,7 +476,6 @@ class RegisterTest(FormatTest):
             args = list(args)
             args.insert(0, value)
             return args
-
         self.format.register(test)
         self.assertEqual(test, self.format._filters['test'])
     
@@ -430,6 +485,213 @@ class RegisterTest(FormatTest):
             self.format(1200, 'intcomma'),
             '1,200'
         )
+    
+    def test_ap_state(self):
+        "Return AP state style of a state"
+        self.assertEqual(
+            self.format(6, 'ap_state'),
+            'Calif.'
+        )
+        self.assertEqual(
+            self.format('California', 'ap_state'),
+            'Calif.'
+        )
+        self.assertEqual(
+            self.format('CA', 'ap_state'),
+            'Calif.'
+        )
+        self.assertEqual(
+            self.format('California', 'ap_state'),
+            'Calif.'
+        )
+        self.assertEqual(
+            self.format('foo', 'ap_state'),
+            'foo'
+        )
+        self.assertEqual(
+            self.format('foo', 'ap_state', failure_string='bar'),
+            'bar'
+        )
+    
+    def test_capfirst(self):
+        "Returns a string with only the first character capitalized"
+        self.assertEqual(
+            self.format('ALLCAPS', 'capfirst'),
+            'Allcaps'
+        )
+        self.assertEqual(
+            self.format('whisper', 'capfirst'),
+            'Whisper'
+        )
+        self.assertEqual(
+            self.format('CaMeLcAsE', 'capfirst'),
+            'Camelcase'
+        )
+        self.assertEqual(
+            self.format('', 'capfirst'),
+            'N/A'
+        )
+        self.assertEqual(
+            self.format(1, 'capfirst'),
+            'N/A'
+        )
+        self.assertEqual(
+            self.format(1, 'capfirst', failure_string='bar'),
+            'bar'
+        )
+    
+    def test_dollar_signs(self):
+        "Converts an integer into the corresponding number of dollar sign symbols."
+        self.assertEqual(
+            self.format(1, 'dollar_signs'),
+            '$'
+        )
+        self.assertEqual(
+            self.format(5, 'dollar_signs'),
+            '$$$$$'
+        )
+        self.assertEqual(
+            self.format('foo', 'dollar_signs'),
+            'N/A'
+        )
+        self.assertEqual(
+            self.format('foo', 'dollar_signs', failure_string='bar'),
+            'bar'
+        )
+    
+    def test_image(self):
+        "Returns an HTML image tag"
+        self.assertEqual(
+            self.format('http://lorempixel.com/400/200/', 'image'),
+            '<img src="http://lorempixel.com/400/200/" style="">'
+        )
+    
+    def test_percentage(self):
+        "Converts a floating point value into a percentage value."
+        self.assertEqual(
+            self.format(0.02, 'percentage'),
+            '2.0%'
+        )
+        self.assertEqual(
+            self.format(0.10560, 'percentage'),
+            '10.6%'
+        )
+        self.assertEqual(
+            self.format(0.10560, 'percentage', multiply=False),
+            '0.1%'
+        )
+        self.assertEqual(
+            self.format(0.10560, 'percentage', decimal_places=3),
+            '10.560%'
+        )
+        self.assertEqual(
+            self.format('foo', 'percentage'),
+            'N/A'
+        )
+        self.assertEqual(
+            self.format('foo', 'percentage', failure_string='bar'),
+            'bar'
+        )
+    
+    def test_percent_change(self):
+        "Converts a floating point value into a percentage change value."
+        self.assertEqual(
+            self.format(0.02, 'percent_change'),
+            '+2.0%'
+        )
+        self.assertEqual(
+            self.format(-0.10560, 'percent_change'),
+            '-10.6%'
+        )
+        self.assertEqual(
+            self.format(-0.10560, 'percent_change', multiply=False),
+            '-0.1%'
+        )
+        self.assertEqual(
+            self.format(-0.10560, 'percent_change', decimal_places=3),
+            '-10.560%'
+        )
+        self.assertEqual(
+            self.format('foo', 'percent_change'),
+            'N/A'
+        )
+        self.assertEqual(
+            self.format('foo', 'percent_change', failure_string='bar'),
+            'bar'
+        )
+    
+    def test_ratio(self):
+        "Converts a floating point value a X:1 ratio."
+        self.assertEqual(
+            self.format(1, 'ratio'),
+            '1:1'
+        )
+        self.assertEqual(
+            self.format(2, 'ratio'),
+            '2:1'
+        )
+        self.assertEqual(
+            self.format(2.2, 'ratio'),
+            '2:1'
+        )
+        self.assertEqual(
+            self.format('foo', 'ratio'),
+            'N/A'
+        )
+        self.assertEqual(
+            self.format('foo', 'ratio', failure_string='bar'),
+            'bar'
+        )
+    
+    def test_stateface(self):
+        "Returns ProPublica stateface"
+        self.assertEqual(
+            self.format('California', 'stateface'),
+            'E'
+        )
+        self.assertEqual(
+            self.format('Wyo.', 'stateface'),
+            'x'
+        )
+    
+    def test_state_postal(self):
+        "Returns a state's postal code"
+        self.assertEqual(
+            self.format('California', 'state_postal'),
+            'CA'
+        )
+        self.assertEqual(
+            self.format('Wyo.', 'state_postal'),
+            'WY'
+        )
+        self.assertEqual(
+            self.format('foo', 'state_postal'),
+            'foo'
+        )
+    
+    def test_title(self):
+        "Converts a string into titlecase."
+        self.assertEqual(
+            self.format('ALLCAPS YO', 'title'),
+            'Allcaps Yo'
+        )
+        self.assertEqual(
+            self.format('whisper ing', 'title'),
+            'Whisper Ing'
+        )
+        self.assertEqual(
+            self.format('CaMeLcAsE', 'title'),
+            'Camelcase'
+        )
+        self.assertEqual(
+            self.format('', 'title'),
+            'N/A'
+        )
+        self.assertEqual(
+            self.format(1, 'title'),
+            'N/A'
+        )
+
 
 class OpenerTest(unittest.TestCase):
     
@@ -455,6 +717,22 @@ class RemoteTest(unittest.TestCase):
         columns = reader.next()
         t = TableFu(response2)
         self.assertEqual(columns, t.columns)
+
+
+class UpdateTest(TableTest):
+    """
+    Tests for things that update or otherwise transform data
+    """
+    def test_transform_to_int(self):
+        """
+        Convert the Number of Pages field to integers
+        """
+        t = TableFu(self.csv_file)
+        pages = t.values('Number of Pages')
+        t.transform('Number of Pages', int)
+        for s, i in zip(pages, t.values('Number of Pages')):
+            self.assertEqual(int(s), i)
+        
 
 
 if __name__ == '__main__':

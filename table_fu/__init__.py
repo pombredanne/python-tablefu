@@ -4,11 +4,11 @@ This is a Python version of Propublica's TableFu Ruby library.
 
 TableFu parses, sorts and formats table-like streams, like CSVs,
 and outputs tables in HTML. It's meant as a utility to make 
-getting tabular on the web easier.
+getting tabular data on the web easier.
 """
 from __future__ import with_statement
 
-__version__ = "0.3.0"
+__version__ = "0.4.2"
 __author__ = "Chris Amico (eyeseast@gmail.com)"
 
 import csv
@@ -78,6 +78,7 @@ class TableFu(object):
         self.faceted_on = None
         self.totals = {}
         self.formatting = options.get('formatting', {})
+        self.style = options.get('style', {})
         self.options = options
         if options.has_key('sorted_by'):
             col = options['sorted_by'].keys()[0]
@@ -107,6 +108,14 @@ class TableFu(object):
     def rows(self):
         return (Row(row, i, self) for i, row in enumerate(self.table))
 
+    @property
+    def headers(self):
+        if self._columns:
+            col_set = self._columns
+        else:
+            col_set = self.default_columns
+        return [Header(col, i, self) for i, col in enumerate(col_set)]
+
     def _get_columns(self):
         if self._columns:
             return self._columns
@@ -132,6 +141,19 @@ class TableFu(object):
         index = self.default_columns.index(column_name)
         self.table.sort(key = lambda row: row[index], reverse=reverse)
         self.options['sorted_by'] = {column_name: {'reverse': reverse}}
+
+    def transform(self, column_name, func):
+        if column_name not in self.default_columns:
+            raise ValueError("%s isn't a column in this table" % column_name)
+
+        if not callable(func):
+            raise TypeError("%s isn't callable" % func)
+
+        index = self.default_columns.index(column_name)
+        for row in self.table:
+            val = row[index]
+            val = func(val)
+            row[index] = val
 
     def values(self, column_name, unique=False):
         if column_name not in self.default_columns:
@@ -377,12 +399,11 @@ class Datum(object):
         if self.table.formatting.has_key(self.column_name):
             func = self.table.formatting[self.column_name].get('filter', None)
             args = self.table.formatting[self.column_name].get('args', [])
-            
+            kwargs = self.table.formatting[self.column_name].get('options', {})
             if func:
                 row = self.table[self.row_num]
                 args = [row[arg].value for arg in args]
-                return format(self.value, func, *args)
-                
+                return format(self.value, func, *args, **kwargs)
         return self.value
     
     def __eq__(self, other):
@@ -392,7 +413,47 @@ class Datum(object):
             return self.value == other
     
     def as_td(self):
-        return '<td class="datum">%s</td>' % self.__str__()
+        return '<td style="%s" class="datum">%s</td>' % (self.style or '', self.__str__())
+    
+    def _get_style(self):
+        try:
+            return self.table.style[self.column_name]
+        except KeyError:
+            return None
+    style = property(_get_style)
+
+
+class Header(object):
+    """
+    A header row on a column.
+    """
+    def __init__(self, name, col_num, table):
+        self.name = name
+        self.col_num = col_num
+        self.table = table
+    
+    def __repr__(self):
+        return "<Header: %s>" % (self.name)
+        
+    def __str__(self):
+        return self.name.encode('utf-8')
+    
+    def __eq__(self, other):
+        if type(other) == type(self):
+            return self.name == other.name
+        else:
+            return self.name == other
+    
+    def as_th(self):
+        return '<th style="%s" class="header">%s</th>' % (self.style or '', self.__str__())    
+    
+    def _get_style(self):
+        try:
+            return self.table.style[self.name]
+        except KeyError:
+            return None
+    style = property(_get_style)
+
 
 def odd_even(num):
     if num % 2 == 0:
